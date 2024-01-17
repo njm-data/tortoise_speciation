@@ -1,0 +1,399 @@
+---
+title: "Speciaiton_figures_clean"
+output: html_document
+date: "2023-04-19"
+---
+
+```{r}
+library(tidyverse)
+#library(ggplot2)
+#library(readr)
+#library(dplyr)
+#library(stringr)
+
+setwd("~/OneDrive\ -\ UAB\ -\ The\ University\ of\ Alabama\ at\ Birmingham/Research/Speciation/intersect/roundtwo/finalization")
+#setwd("C:/Users/blahj/OneDrive - UAB - The University of Alabama at Birmingham/Research/Speciation/intersect/roundtwo/finalization")
+
+g <- read_tsv("keep_gene_v5.csv", col_names=TRUE)
+master_colnames <- colnames(g)
+fl <- read_tsv("flanking_filtered_v5.csv", col_names=TRUE)
+#read in indel files
+gi <- read_tsv("keep_indel_v5.csv", col_names=TRUE)
+#gi
+#summary(gi) #the one NA is an INDEL at the -1 position. Will set it's Gene name manually and percentage to 0.
+gi <- gi %>% mutate(percentage = replace(percentage, is.na(percentage), 0))
+gi <- gi %>% mutate(Gene_Name = replace(Gene_Name, is.na(Gene_Name), "ID=maker-scaffold_19-snap-gene-110.169;Name=maker-scaffold_19-snap-gene-110.169;Note=Similar to WDR6: WD repeat-containing protein 6 (Homo sapiens OX%3D9606);"))
+gi <- gi %>% mutate(TSS_dist = replace(TSS_dist, is.na(TSS_dist), 0))
+#summary(gi)
+fli <- read_tsv("flanking_filtered_indel_v5.csv", col_names=TRUE)
+#fli
+#summary(fli)
+
+#flanking wholes
+fw <- read_csv("flanking_whole_v3.csv")
+fwi <- read_csv("flanking_whole_indel_v3.csv", col_names=TRUE)
+#summary(fwi)
+
+fc <- read_tsv("flanking_coords_SNPS_v2.csv")
+colnames(fc) <- c("gene_name", "coord")
+fci <- read_csv("flanking_coords_INDELS_v2.csv")
+colnames(fci) <- c("gene_name", "coord")
+
+```
+
+```{r}
+#reformat for all genes
+fc_promoter <- fc %>% filter(between(coord, -1000,0))
+fc_enhancer <- fc %>% filter(coord < - 1000)
+fci_promoter <- fci %>% filter(between(coord, -1000,0))
+fci_enhancer <- fci %>% filter(coord < - 1000)
+fc_enhancer_count <- fc_enhancer %>% count(gene_name)
+fc_promoter_count <- fc_promoter %>% count(gene_name)
+fci_enhancer_count <- fci_enhancer %>% count(gene_name)
+fci_promoter_count <- fci_promoter %>% count(gene_name)
+Gene_list <- c()
+t1 <- g %>% distinct(Gene_Name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- gi %>% distinct(Gene_Name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fc %>% distinct(gene_name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fci %>% distinct(gene_name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fw %>% distinct(gene_list) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fwi %>% distinct(gene_list) %>% pull()
+Gene_list <- append(Gene_list, t1)
+final_genelist <- unique(Gene_list)
+
+snp_df <-  setNames(data.frame(matrix(ncol = 3, nrow = 0)), c("Gene_Name",  "Feature_Type", "Count"))
+ftypes <- c("Promoter", "5'_UTR", "Exon", "Intron", "3'_UTR")
+urow= 1
+for (f in ftypes) {
+  for (x in final_genelist){
+    presence = 0
+    snp_df[urow,"Gene_Name"] = x
+    
+    
+    if (f == "Enhancer"){
+      snp_df[urow, "Feature_Type"] = f
+      for (row in 1:nrow(fc_enhancer_count)){
+        gn <- fc_enhancer_count[row,"gene_name"]
+        if (gn == x){
+          snp_df[urow,"Count"] = fc_enhancer_count[row,"n"]
+          urow = urow + 1
+          presence = 1
+        }
+      }
+      if (presence == 0){
+        snp_df[urow,"Count"] = 0
+        urow = urow + 1
+      }
+    }
+    
+    if (f == "Promoter"){
+      snp_df[urow,"Feature_Type"] = f
+      for (row in 1:nrow(fc_promoter_count)) {
+        gn <- fc_promoter_count[row,"gene_name"]
+        if (gn == x) {
+          snp_df[urow,"Count"] = fc_promoter_count[row,"n"]
+          urow = urow + 1
+          presence = 1
+        }
+      }
+      if (presence == 0){
+        snp_df[urow,"Count"] = 0
+        urow = urow + 1
+      }
+    }
+      
+    if (f == "5'_UTR") {
+      snp_df[urow,"Feature_Type"] = f
+      snp_df[urow,"Count"] = g %>% filter(Gene_Name == x) %>% filter(feature_type == "five_prime_UTR") %>% count() %>% pull()
+      urow = urow + 1
+    }
+    
+    if (f == "Exon") {
+      snp_df[urow,"Feature_Type"] = f
+      snp_df[urow,"Count"] = g %>% filter(Gene_Name == x) %>% filter(feature_type == "CDS") %>% count() %>% pull()
+      urow = urow + 1
+    }
+    if (f == "Intron") {
+      snp_df[urow,"Feature_Type"] = f
+      snp_df[urow,"Count"] = g %>% filter(Gene_Name == x) %>% filter(feature_type == "intron") %>% count() %>% pull()
+      urow = urow + 1
+    } 
+    
+    if (f == "3'_UTR") {
+      snp_df[urow,"Feature_Type"] = f
+      snp_df[urow,"Count"] = g %>% filter(Gene_Name == x) %>% filter(feature_type == "three_prime_UTR") %>% count() %>% pull()
+      urow = urow + 1
+    } 
+  }
+  
+}
+snp_df["Mutation_type"] = "SNPs"
+write.csv(snp_df,"snp_df3.csv") #snp_df2 is the promoter overcalculation
+
+
+## ran on cheaha
+fc_promoter <- fc %>% filter(between(coord, -1000, 0))
+fc_enhancer <- fc %>% filter(coord < - 1000)
+fci_promoter <- fci %>% filter(between(coord, -1000, 0))
+fci_enhancer <- fci %>% filter(coord < - 1000)
+fc_enhancer_count <- fc_enhancer %>% count(gene_name)
+fc_promoter_count <- fc_promoter %>% count(gene_name)
+fci_enhancer_count <- fci_enhancer %>% count(gene_name)
+fci_promoter_count <- fci_promoter %>% count(gene_name)
+Gene_list <- c()
+t1 <- g %>% distinct(Gene_Name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- gi %>% distinct(Gene_Name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fc %>% distinct(gene_name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fci %>% distinct(gene_name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fw %>% distinct(gene_list) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- fwi %>% distinct(gene_list) %>% pull()
+Gene_list <- append(Gene_list, t1)
+final_genelist <- unique(Gene_list)
+
+indel_df <-  setNames(data.frame(matrix(ncol = 3, nrow = 0)), c("Gene_Name", "Feature_Type", "Count"))
+ftypes <- c("Promoter", "5'_UTR", "Exon", "Intron", "3'_UTR")
+urow= 1
+for (f in ftypes) {
+  for (x in final_genelist){
+    presence = 0
+    indel_df[urow,"Gene_Name"] = x
+    
+    if (f == "Enhancer"){
+      indel_df[urow, "Feature_Type"] = f
+      for (row in 1:nrow(fci_enhancer_count)){
+        gn <- fci_enhancer_count[row,"gene_name"]
+        if (gn == x){
+          indel_df[urow,"Count"] = fci_enhancer_count[row,"n"]
+          urow = urow + 1
+          presence = 1
+        }
+      }
+      if (presence == 0){
+        indel_df[urow,"Count"] = 0
+        urow = urow + 1
+      }
+    }
+    
+    if (f == "Promoter"){
+      indel_df[urow,"Feature_Type"] = f
+      for (row in 1:nrow(fci_promoter_count)) {
+        gn <- fci_promoter_count[row,"gene_name"]
+        if (gn == x) {
+          indel_df[urow,"Count"] = fci_promoter_count[row,"n"]
+          urow = urow + 1
+          presence = 1
+        }
+      }
+      if (presence == 0){
+        indel_df[urow,"Count"] = 0
+        urow = urow + 1
+      }
+    }
+      
+    if (f == "5'_UTR") {
+      indel_df[urow,"Feature_Type"] = f
+      indel_df[urow,"Count"] = gi %>% filter(Gene_Name == x) %>% filter(feature_type == "five_prime_UTR") %>% count() %>% pull()
+      urow = urow + 1
+    }
+    
+    if (f == "Exon") {
+      indel_df[urow,"Feature_Type"] = f
+      indel_df[urow,"Count"] = gi %>% filter(Gene_Name == x) %>% filter(feature_type == "CDS") %>% count() %>% pull()
+      urow = urow + 1
+    }
+    if (f == "Intron") {
+      indel_df[urow,"Feature_Type"] = f
+      indel_df[urow,"Count"] = gi %>% filter(Gene_Name == x) %>% filter(feature_type == "intron") %>% count() %>% pull()
+      urow = urow + 1
+    } 
+    
+    if (f == "3'_UTR") {
+      indel_df[urow,"Feature_Type"] = f
+      indel_df[urow,"Count"] = gi %>% filter(Gene_Name == x) %>% filter(feature_type == "three_prime_UTR") %>% count() %>% pull()
+      urow = urow + 1
+    } 
+  }
+  
+}
+indel_df["Mutation_type"] = "INDELs"
+#write.csv(indel_df,"indel_df3.csv")
+```
+
+# make it just the 420 genes
+```{r}
+cheaha_indel <- read_csv("indel_df3.csv")
+cheaha_indel <- cheaha_indel[,-1]
+cheaha_snp <- read_csv("snp_df3.csv")
+cheaha_snp <- cheaha_snp[,-1]
+```
+
+```{r}
+Gene_list <- c()
+t1 <- g %>% distinct(Gene_Name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+t1 <- gi %>% distinct(Gene_Name) %>% pull()
+Gene_list <- append(Gene_list, t1)
+final_genelist <- unique(Gene_list)
+holding <- setNames(data.frame(matrix(ncol = 4, nrow = 0)), c("Gene_Name", "Feature_Type", "Count", "Mutation_type"))
+for (row in 1:nrow(cheaha_snp)) {
+  for (gn in final_genelist) {
+    l <- cheaha_snp[row,"Gene_Name"]
+    if (gn == l) {
+      temp <- cheaha_snp[row,]
+      colnames(temp) <- c("Gene_Name", "Feature_Type", "Count", "Mutation_type")
+      holding <- rbind(holding,temp)
+    }
+  }
+}
+final_snp <- holding
+holding <- setNames(data.frame(matrix(ncol = 4, nrow = 0)), c("Gene_Name", "Feature_Type", "Count", "Mutation_type"))
+for (row in 1:nrow(cheaha_indel)) {
+  for (gn in final_genelist) {
+    l <- cheaha_indel[row,"Gene_Name"]
+    if (gn == l) {
+      temp <- cheaha_indel[row,]
+      colnames(temp) <- c("Gene_Name", "Feature_Type", "Count", "Mutation_type")
+      holding <- rbind(holding,temp)
+    }
+  }
+}
+final_indel <- holding
+
+h2 <- setNames(data.frame(matrix(ncol = 2, nrow = 0)), c("gene_name","coord"))
+for (row in 1:nrow(fci)) {
+  for (gn in final_genelist) {
+    l <- fci[row,"gene_name"]
+    if (gn == l) {
+      temp <- fci[row,]
+      colnames(temp) <- c("gene_name", "coord")
+      h2 <- rbind(h2,temp)
+    }
+  }
+}
+final_fci <- h2
+h2 <- setNames(data.frame(matrix(ncol = 2, nrow = 0)), c("gene_name","coord"))
+for (row in 1:nrow(fc)) {
+  for (gn in final_genelist) {
+    l <- fc[row,"gene_name"]
+    if (gn == l) {
+      temp <- fc[row,]
+      colnames(temp) <- c("gene_name", "coord")
+      h2 <- rbind(h2,temp)
+    }
+  }
+}
+final_fc <- h2
+```
+
+```{r}
+write.csv(final_fc,"final_fc_v2.csv")
+write.csv(final_fci,"final_fci_v2.csv")
+write.csv(final_indel,"downsized_final_indels_v2.csv")
+write.csv(final_snp,"downsized_final_snps_v2.csv")
+```
+# finalized formatting
+
+```{r}
+final_snp <- read_csv("downsized_final_snps_v2.csv")
+final_indel <- read_csv("downsized_final_indels_v2.csv")
+final_snp <- final_snp[,-1]
+final_indel <- final_indel[,-1]
+all_limited <- rbind(final_snp,final_indel)
+all_limited <- all_limited %>% mutate(Feature_Type = str_replace(Feature_Type,"3'_UTR", "3' UTR")) %>% mutate(Feature_Type = str_replace(Feature_Type,"5'_UTR", "5' UTR"))
+all_limited <- all_limited %>% mutate(gene = str_extract_all(Gene_Name, "(?<=Similar to).+(?=:)"))  %>% mutate_if(is.list, as.character) ## gets the short name
+tempchange <- all_limited %>% filter(gene=="character(0)") ## ID the ones where there were no end :
+tempnochange <- all_limited %>% filter(gene != "character(0)")  ## ID the ones where there was an end :
+tempchange <- tempchange %>% mutate(gene = str_extract_all(Gene_Name, "(?<=Similar to).+(?=\\()")) %>% mutate(gene = str_replace(gene, "character(0)", "Unknown")) # gets longer short name
+all_limited <- bind_rows(tempchange, tempnochange) %>% arrange(Feature_Type) #bring them back together.
+
+all_limitedv2 <- all_limited %>% filter(!grepl("ID=maker-scaffold_49-snap-gene-24.114;Name=maker-scaffold_49-snap-gene-24.114|ID=maker-scaffold_18-snap-gene-1.15;Name=maker-scaffold_18-snap-gene-1.15|ID=maker-scaffold_26-snap-gene-42.3;Name=maker-scaffold_26-snap-gene-42.3|ID=maker-scaffold_19-snap-gene-110.177;Name=maker-scaffold_19-snap-gene-110.177|ID=maker-scaffold_120-snap-gene-4.91;Name=maker-scaffold_120-snap-gene-4.91|ID=maker-scaffold_120-augustus-gene-4.224;Name=maker-scaffold_120-augustus-gene-4.224|ID=maker-scaffold_120-augustus-gene-4.228;Name=maker-scaffold_120-augustus-gene-4.228|ID=maker-scaffold_7-snap-gene-132.16;Name=maker-scaffold_7-snap-gene-132.16|ID=maker-scaffold_25-augustus-gene-0.6;Name=maker-scaffold_25-augustus-gene-0.6|ID=maker-scaffold_114-augustus-gene-0.44;Name=maker-scaffold_114-augustus-gene-0.44|ID=maker-scaffold_37-augustus-gene-4.14;Name=maker-scaffold_37-augustus-gene-4.14|ID=maker-scaffold_111-snap-gene-2.54;Name=maker-scaffold_111-snap-gene-2.54|ID=maker-scaffold_101-snap-gene-4.4;Name=maker-scaffold_101-snap-gene-4.4|ID=maker-scaffold_0-snap-gene-39.31;Name=maker-scaffold_0-snap-gene-39.31|ID=maker-scaffold_0-snap-gene-39.33;Name=maker-scaffold_0-snap-gene-39.33|ID=maker-scaffold_397-snap-gene-0.19;Name=maker-scaffold_397-snap-gene-0.19|ID=maker-scaffold_72-augustus-gene-20.95;Name=maker-scaffold_72-augustus-gene-20.95|ID=maker-scaffold_72-snap-gene-20.49;Name=maker-scaffold_72-snap-gene-20.49|ID=maker-scaffold_77-snap-gene-3.18;Name=maker-scaffold_77-snap-gene-3.18|ID=maker-scaffold_65-snap-gene-7.17;Name=maker-scaffold_65-snap-gene-7.17|ID=maker-scaffold_7-snap-gene-117.20;Name=maker-scaffold_7-snap-gene-117.20|ID=maker-scaffold_7-snap-gene-117.22;Name=maker-scaffold_7-snap-gene-117.22|ID=maker-scaffold_15-snap-gene-3.119;Name=maker-scaffold_15-snap-gene-3.119|ID=maker-scaffold_157-augustus-gene-2.136;Name=maker-scaffold_157-augustus-gene-2.136|ID=maker-scaffold_117-augustus-gene-3.35;Name=maker-scaffold_117-augustus-gene-3.35|ID=maker-scaffold_117-augustus-gene-3.43;Name=maker-scaffold_117-augustus-gene-3.43|ID=maker-scaffold_4-snap-gene-82.34;Name=maker-scaffold_4-snap-gene-82.34", Gene_Name)) #taking out the no matches, paralog matches, and the TRDC that I don't think is a dup event (this is taking out 27 genes)
+
+#write.csv(all_limitedv2, "all_limitedv2.csv")
+intronless <- all_limitedv2 %>% filter(Feature_Type != "Intron")
+#write.csv(intronless, "all_limitedv2_nointrons.csv")
+```
+
+# Figures
+
+```{r}
+# add Flanking numbers
+
+all_limitedv2 <- read_csv("all_limitedv2.csv", col_names=TRUE)
+ggplot(all_limitedv2,aes(x = factor(Feature_Type, levels = c("Promoter", "5' UTR", "Exon", "Intron", "3' UTR")), y= Count, color = Mutation_type)) + 
+  geom_point(position = position_jitter(seed = 1, width = 0.3), shape = 1, show.legend = FALSE) + 
+  #geom_point(alpha = 0.4, colour = "grey90", size= 0.95, position = position_jitter(seed = 1, width = 0.2)) + 
+  labs(title = "Number of mutations across the gene and promoter region per gene", y = "Number of mutations per gene", x = "Feature type") + 
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, vjust = 0.5)) + 
+  theme_classic() + 
+  #scale_alpha_manual(values=c(1,0.7)) + 
+  scale_color_manual(values=c("lightskyblue2","deepskyblue4")) 
+  #scale_color_manual(values=c("deepskyblue4","lightskyblue1")) # + 
+  #geom_text(data= top1, aes(x = factor(Feature_Type, levels = c("Promoter", "5' UTR", "Exon", "Intron", "3' UTR")), Count, label = Count), position = position_dodge(width = 0.8)) #vjust = -10)
+#ggsave("current_figs/per_gene_dots.svg")
+
+top_p_snp <- all_limitedv2 %>% filter(Feature_Type == "Promoter") %>% filter(Mutation_type == "SNPs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+top_p_indel <- all_limitedv2 %>% filter(Feature_Type == "Promoter") %>% filter(Mutation_type == "INDELs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+
+top_5_snp <- all_limitedv2 %>% filter(Feature_Type == "5' UTR") %>% filter(Mutation_type == "SNPs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+top_5_indel <- all_limitedv2 %>% filter(Feature_Type == "5' UTR") %>% filter(Mutation_type == "INDELs") %>% arrange(desc(Count)) %>% slice(1:10) %>% filter(Count != 0) %>% select(gene, Count, Feature_Type, Mutation_type)
+
+top_e_snp <- all_limitedv2 %>% filter(Feature_Type == "Exon") %>% filter(Mutation_type == "SNPs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+top_e_indel <- all_limitedv2 %>% filter(Feature_Type == "Exon") %>% filter(Mutation_type == "INDELs") %>% arrange(desc(Count)) %>% slice(1:10) %>%  filter(Count != 0) %>% select(gene, Count, Feature_Type, Mutation_type)
+
+top_i_snp <- all_limitedv2 %>% filter(Feature_Type == "Intron") %>% filter(Mutation_type == "SNPs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+top_i_indel <- all_limitedv2 %>% filter(Feature_Type == "Intron") %>% filter(Mutation_type == "INDELs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+
+top_3_snp <- all_limitedv2 %>% filter(Feature_Type == "3' UTR") %>% filter(Mutation_type == "SNPs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+top_3_indel <- all_limitedv2 %>% filter(Feature_Type == "3' UTR") %>% filter(Mutation_type == "INDELs") %>% arrange(desc(Count)) %>% slice(1:10) %>% select(gene, Count, Feature_Type, Mutation_type)
+
+big_top10s <- bind_rows(top_p_indel,top_p_snp,top_5_snp,top_5_indel,top_e_snp,top_e_indel,top_i_snp,top_i_indel,top_3_snp,top_3_indel)
+
+#write_csv(big_top10s, "current_figs/top10s.csv")
+```
+
+```{r}
+ft2 <- c("Flanking", "Promoter", "5' UTR", "Exon", "Intron", "3' UTR")
+v2 <- c(nrow(fl) - all_limitedv2 %>% filter(Feature_Type == "Promoter", Mutation_type == "SNPs") %>% summarise(Total = sum(Count)) %>% pull , 
+        all_limitedv2 %>% filter(Feature_Type == "Promoter", Mutation_type == "SNPs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "5' UTR", Mutation_type == "SNPs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "Exon", Mutation_type == "SNPs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "Intron", Mutation_type == "SNPs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "3' UTR", Mutation_type == "SNPs") %>% summarise(Total = sum(Count)) %>% pull)
+d2 <- tibble(ft2, v2)
+colnames(d2) <- c("Feature_Type", "Count")
+d2["Mutation Type"] = "SNPs"
+
+v2 <- c(nrow(fli) - all_limitedv2 %>% filter(Feature_Type == "Promoter", Mutation_type == "INDELs") %>% summarise(Total = sum(Count)) %>% pull , 
+        all_limitedv2 %>% filter(Feature_Type == "Promoter", Mutation_type == "INDELs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "5' UTR", Mutation_type == "INDELs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "Exon", Mutation_type == "INDELs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "Intron", Mutation_type == "INDELs") %>% summarise(Total = sum(Count)) %>% pull, 
+        all_limitedv2 %>% filter(Feature_Type == "3' UTR", Mutation_type == "INDELs") %>% summarise(Total = sum(Count)) %>% pull)
+d2i <- tibble(ft2, v2)
+names(d2i) <- c("Feature_Type", "Count")
+d2i["Mutation Type"] = "INDELs"
+
+c2_snp <- d2 %>% mutate(standard = Count/(d2 %>% summarise(sum(Count)) %>% pull))
+c2_indel <- d2i %>% mutate(standard = Count/(d2i %>% summarise(sum(Count)) %>% pull))
+c3 <- rbind(c2_snp,c2_indel)
+c3 <- c3 %>% mutate(Feature_Type = str_replace(Feature_Type,"5' UTR", "Geneic")) %>% mutate(Feature_Type = str_replace(Feature_Type,"3' UTR", "Geneic")) %>% mutate(Feature_Type = str_replace(Feature_Type,"Intron", "Geneic")) %>% mutate(Feature_Type = str_replace(Feature_Type,"Exon", "Geneic")) %>% mutate(Feature_Type = str_replace(Feature_Type,"Promoter", "Geneic"))
+
+ggplot(c3, aes(x = factor(Feature_Type, levels = c("Flanking", "Geneic")), y = standard , fill = `Mutation Type`))  + geom_bar(position = "dodge", stat="identity") + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5)) + labs(title = "Primary location of mutations", x = "Feature type", y= "Percentage of mutations") + ylim(0,1) +
+  scale_fill_manual(values=c("lightskyblue2", "deepskyblue4")) + theme_classic()
+#ggsave("current_figs/g_ng_percent.svg")
+
+#for string and go analyses
+#for_analysis <- all_limitedv2 %>% filter(Feature_Type != "Intron", Count != 0)
+#write_csv(for_analysis,"updated_string_genes_v2.csv")
+#write_csv(all_limitedv2, "allmegafinal.csv")
+```
