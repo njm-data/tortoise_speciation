@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-#script to clean up bedtools intersect results, remove duplicates
+#script to get the gene (and genic region) for each mutation, identify mutations within a specified window of a TSS for potential promoter/enhancer mutations.
 
 import argparse
 import sys, os
